@@ -165,8 +165,8 @@
     </div>
 
     <div class="range">
-      <div class="range-head"><span>Darkness</span><span id="darkVal">Medium</span></div>
-      <input type="range" id="dark" min="1" max="3" value="2" step="1">
+      <div class="range-head"><span>Darkness</span><span id="darkVal">5</span></div>
+      <input type="range" id="dark" min="1" max="7" value="5" step="1">
     </div>
   </section>
   <p class="msg" id="msg"></p>
@@ -217,7 +217,10 @@ const CMD = {
   row:      (b)  => packet(0xa2, b),
   feed:     (n)  => packet(0xa1, [n & 0xff, (n >> 8) & 0xff]),
 };
-const ENERGY = { 1: 8000, 2: 14000, 3: 22000 };
+// Darkness 1–7, like the original app. Higher energy = hotter head = darker print.
+const ENERGY = { 1: 8000, 2: 14000, 3: 22000, 4: 32000, 5: 42000, 6: 54000, 7: 65000 };
+// Darker settings need the head to dwell longer per line, so send rows more slowly.
+const ROW_DELAY = { 1: 6, 2: 7, 3: 9, 4: 11, 5: 14, 6: 17, 7: 20 };
 
 // ---------- Bluetooth ----------
 let device = null, tx = null, paused = false;
@@ -269,11 +272,12 @@ function onNotify(ev) {
   if (v[0] === 0x51 && v[1] === 0x78 && v[2] === 0xae) paused = v[6] === 0x10;
 }
 
+let pace = 6;
 async function send(bytes) {
   while (paused) await sleep(20);
   if (tx.writeValueWithoutResponse) await tx.writeValueWithoutResponse(bytes);
   else await tx.writeValue(bytes);
-  await sleep(6);
+  await sleep(pace);
 }
 
 // Pack one row of 384 pixels into 48 bytes. These printers read bits LSB-first.
@@ -289,6 +293,7 @@ async function print() {
   const { bits, height } = current;
   printBtn.disabled = true;
   setStatus("busy", "Printing…");
+  pace = 6;
   try {
     await send(CMD.getState());
     await send(CMD.quality200());
@@ -296,6 +301,7 @@ async function print() {
     await send(CMD.applyEnergy());
     await send(CMD.update());
     await send(CMD.latticeStart());
+    pace = ROW_DELAY[dark.value];
     for (let y = 0; y < height; y++) {
       const row = packRow(bits, y);
       // runs of blank rows are sent as paper feeds, which is much faster
@@ -431,7 +437,7 @@ document.querySelectorAll(".tabs button").forEach(btn => btn.addEventListener("c
 }));
 [text, font, sizeSel, bold, center, bright, dither].forEach(el => el.addEventListener("input", render));
 bright.addEventListener("input", () => $("brightVal").textContent = bright.value);
-dark.addEventListener("input", () => $("darkVal").textContent = ["", "Light", "Medium", "Dark"][dark.value]);
+dark.addEventListener("input", () => $("darkVal").textContent = dark.value);
 $("file").addEventListener("change", e => {
   const f = e.target.files[0]; if (!f) return;
   const img = new Image();
