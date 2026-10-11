@@ -162,11 +162,7 @@
 
     <div id="imagePanel" hidden>
       <label class="file">Choose image<input type="file" id="file" accept="image/*"></label>
-      <div class="range" style="margin-top:14px">
-        <div class="range-head"><span>Brightness</span><span id="brightVal">0</span></div>
-        <input type="range" id="bright" min="-60" max="60" value="0">
-      </div>
-      <label class="check" style="margin-top:10px"><input type="checkbox" id="dither" checked> Dither (better for photos)</label>
+      <p style="margin:10px 0 0;color:var(--muted);font-size:15px">Prints in pure black and white. For crisp results, use an image already dithered at 384 pixels wide.</p>
     </div>
 
     <div class="range">
@@ -174,13 +170,6 @@
       <input type="range" id="dark" min="1" max="4" value="4" step="1">
     </div>
 
-    <div>
-      <label for="speed">Print mode</label>
-      <select id="speed">
-        <option value="4" selected>High definition</option>
-        <option value="8">High speed</option>
-      </select>
-    </div>
   </section>
   <p class="msg" id="msg"></p>
 </main>
@@ -231,8 +220,9 @@ const CMD = {
   feed:     (n)  => packet(0xa1, [n & 0xff, (n >> 8) & 0xff]),
   speed:    (v)  => packet(0xbd, [v & 0xff]),
 };
-// Darkness 1–7, like the original app. Higher energy = hotter head = darker print.
-const ENERGY = { 1: 2000, 2: 5000, 3: 8000, 4: 12000 };
+// Darkness 1–4. The printer slows its motor by itself for higher values.
+const ENERGY = { 1: 4000, 2: 6500, 3: 9000, 4: 12000 };
+const MOTOR_SPEED = 4;   // value used for all the calibration prints
 
 
 // ---------- Bluetooth ----------
@@ -312,7 +302,7 @@ async function print() {
     await send(CMD.quality200());
     await send(CMD.energy(ENERGY[dark.value]));
     await send(CMD.applyEnergy());
-    await send(CMD.speed(Number(speedSel.value)));
+    await send(CMD.speed(MOTOR_SPEED));
     await send(CMD.update());
     await send(CMD.latticeStart());
     pace = 6;   // steady pacing; faster floods the printer
@@ -354,14 +344,13 @@ function render() {
   const { data } = ctx.getImageData(0, 0, WIDTH, canvas.height);
   const n = WIDTH * canvas.height;
   const gray = new Float32Array(n);
-  const b = mode === "image" ? Number(bright.value) : 0;
   for (let i = 0; i < n; i++) {
     const a = data[i * 4 + 3] / 255;   // transparent counts as white paper
     const g = 0.299 * data[i*4] + 0.587 * data[i*4+1] + 0.114 * data[i*4+2];
-    gray[i] = g * a + 255 * (1 - a) + b;
+    gray[i] = g * a + 255 * (1 - a);
   }
   const bits = new Uint8Array(n);
-  if (!threshold && (mode === "test" || dither.checked)) {
+  if (!threshold) {   // only the test strip is dithered here
     for (let y = 0; y < canvas.height; y++) for (let x = 0; x < WIDTH; x++) {
       const i = y * WIDTH + x, old = gray[i], val = old < 128 ? 0 : 255, err = old - val;
       bits[i] = val === 0 ? 1 : 0;
@@ -428,7 +417,7 @@ function renderTest() {
   ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, c.width, c.height);
   ctx.fillStyle = "#000"; ctx.textBaseline = "middle";
   ctx.font = '700 20px "Helvetica Neue", Arial, sans-serif';
-  ctx.fillText(`Darkness ${dark.value}, ${speedSel.selectedOptions[0].text.toLowerCase()}`, 8, head / 2);
+  ctx.fillText(`Darkness ${dark.value}`, 8, head / 2);
   ctx.font = '700 22px "Helvetica Neue", Arial, sans-serif';
   for (let i = 0; i < steps; i++) {
     const pct = i * 10, y = head + i * band;
@@ -446,14 +435,16 @@ function renderImage() {
   const h = Math.max(1, Math.round(loadedImage.height * WIDTH / loadedImage.width));
   const c = document.createElement("canvas");
   c.width = WIDTH; c.height = Math.min(h, 4000);
-  c.getContext("2d").drawImage(loadedImage, 0, 0, WIDTH, c.height);
-  return { canvas: c, threshold: false };
+  const ctx = c.getContext("2d");
+  ctx.imageSmoothingEnabled = false;   // keep pre-dithered pixels sharp when resizing
+  ctx.drawImage(loadedImage, 0, 0, WIDTH, c.height);
+  return { canvas: c, threshold: true };
 }
 
 // ---------- UI wiring ----------
 const $ = id => document.getElementById(id);
 const text = $("text"), font = $("font"), sizeSel = $("size"), bold = $("bold"), center = $("center");
-const bright = $("bright"), dither = $("dither"), dark = $("dark"), speedSel = $("speed"), empty = $("empty");
+const dark = $("dark"), empty = $("empty");
 const connectBtn = $("connectBtn"), printBtn = $("printBtn");
 
 function setStatus(state, label) { $("led").className = "led " + state; $("statusText").textContent = label; }
@@ -471,8 +462,7 @@ document.querySelectorAll(".tabs button").forEach(btn => btn.addEventListener("c
   $("testPanel").hidden = mode !== "test";
   render();
 }));
-[text, font, sizeSel, bold, center, bright, dither, dark, speedSel].forEach(el => el.addEventListener("input", render));
-bright.addEventListener("input", () => $("brightVal").textContent = bright.value);
+[text, font, sizeSel, bold, center, dark].forEach(el => el.addEventListener("input", render));
 dark.addEventListener("input", () => $("darkVal").textContent = dark.value);
 $("file").addEventListener("change", e => {
   const f = e.target.files[0]; if (!f) return;
