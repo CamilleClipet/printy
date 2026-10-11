@@ -171,7 +171,7 @@
 
     <div class="range">
       <div class="range-head"><span>Darkness</span><span id="darkVal">4</span></div>
-      <input type="range" id="dark" min="1" max="7" value="4" step="1">
+      <input type="range" id="dark" min="1" max="4" value="4" step="1">
     </div>
 
     <div>
@@ -232,7 +232,7 @@ const CMD = {
   speed:    (v)  => packet(0xbd, [v & 0xff]),
 };
 // Darkness 1–7, like the original app. Higher energy = hotter head = darker print.
-const ENERGY = { 1: 8000, 2: 14000, 3: 22000, 4: 32000, 5: 42000, 6: 54000, 7: 65000 };
+const ENERGY = { 1: 2000, 2: 5000, 3: 8000, 4: 12000 };
 
 
 // ---------- Bluetooth ----------
