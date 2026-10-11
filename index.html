@@ -182,7 +182,8 @@
 <script>
 // ---------- Printer protocol (cat printer family: service AE30, write AE01, notify AE02) ----------
 const WIDTH = 384;                      // print head width in dots
-const SERVICE_ADV = 0xaf30, SERVICE = 0xae30, TX = 0xae01, RX = 0xae02;
+const uuid = s => `0000${s}-0000-1000-8000-00805f9b34fb`;
+const SERVICE_ADV = uuid("af30"), SERVICE = uuid("ae30"), TX = uuid("ae01"), RX = uuid("ae02");
 
 const CRC_TABLE = (() => {
   const t = new Uint8Array(256);
@@ -226,25 +227,38 @@ async function connect() {
   if (!navigator.bluetooth) {
     return say("This browser can't use Bluetooth. On iPhone, open this page in the Bluefy app.", true);
   }
+  let step = "choosing the printer";
   try {
     setStatus("busy", "Connecting…");
     device = await navigator.bluetooth.requestDevice({
-      filters: [{ services: [SERVICE_ADV] }, { namePrefix: "X6" }],
-      optionalServices: [SERVICE],
+      filters: [{ namePrefix: "X6" }, { services: [SERVICE_ADV] }],
+      optionalServices: [SERVICE, SERVICE_ADV],
     });
     device.addEventListener("gattserverdisconnected", onDisconnect);
+    step = "connecting";
     const server = await device.gatt.connect();
+    step = "finding the print service";
     const svc = await server.getPrimaryService(SERVICE);
+    step = "finding the write channel";
     tx = await svc.getCharacteristic(TX);
+    step = "finding the status channel";
     const rx = await svc.getCharacteristic(RX);
-    await rx.startNotifications();
-    rx.addEventListener("characteristicvaluechanged", onNotify);
+    step = "turning on status updates";
+    try {
+      await rx.startNotifications();
+      rx.addEventListener("characteristicvaluechanged", onNotify);
+    } catch (e) {
+      console.warn("Notifications unavailable", e);   // printing still works without them
+    }
     setStatus("on", device.name || "Connected");
     say("");
     updateButtons();
   } catch (e) {
+    tx = null;
     setStatus("", "Not connected");
-    if (e.name !== "NotFoundError") say("Connection failed: " + e.message, true);
+    if (e && e.name === "NotFoundError" && step === "choosing the printer") return say("");
+    const detail = (e && (e.message || e.name)) || String(e);
+    say(`Connection failed while ${step}: ${detail}`, true);
   }
 }
 function onDisconnect() { tx = null; setStatus("", "Not connected"); updateButtons(); }
