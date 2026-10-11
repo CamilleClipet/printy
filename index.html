@@ -175,23 +175,11 @@
     </div>
 
     <div>
-      <label for="speed">Motor speed</label>
+      <label for="speed">Print mode</label>
       <select id="speed">
-        <option value="">Printer default</option>
-        <option value="1">1 (slowest)</option>
-        <option value="2">2</option>
-        <option value="3">3</option>
-        <option value="4">4</option>
-        <option value="6">6</option>
-        <option value="8">8</option>
-        <option value="16">16</option>
-        <option value="32">32 (fast)</option>
+        <option value="4" selected>High definition</option>
+        <option value="8">High speed</option>
       </select>
-    </div>
-
-    <div class="range">
-      <div class="range-head"><span>Delay between lines</span><span id="delayVal">6 ms</span></div>
-      <input type="range" id="delay" min="6" max="20" value="6" step="1">
     </div>
   </section>
   <p class="msg" id="msg"></p>
@@ -324,10 +312,10 @@ async function print() {
     await send(CMD.quality200());
     await send(CMD.energy(ENERGY[dark.value]));
     await send(CMD.applyEnergy());
-    if (speedSel.value) await send(CMD.speed(Number(speedSel.value)));
+    await send(CMD.speed(Number(speedSel.value)));
     await send(CMD.update());
     await send(CMD.latticeStart());
-    pace = Number(delay.value);
+    pace = 6;   // steady pacing; faster floods the printer
     for (let y = 0; y < height; y++) {
       const row = packRow(bits, y);
       // runs of blank rows are sent as paper feeds, which is much faster
@@ -440,7 +428,7 @@ function renderTest() {
   ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, c.width, c.height);
   ctx.fillStyle = "#000"; ctx.textBaseline = "middle";
   ctx.font = '700 20px "Helvetica Neue", Arial, sans-serif';
-  ctx.fillText(`Dark ${dark.value}, speed ${speedSel.value || "default"}, delay ${delay.value} ms`, 8, head / 2);
+  ctx.fillText(`Darkness ${dark.value}, ${speedSel.selectedOptions[0].text.toLowerCase()}`, 8, head / 2);
   ctx.font = '700 22px "Helvetica Neue", Arial, sans-serif';
   for (let i = 0; i < steps; i++) {
     const pct = i * 10, y = head + i * band;
@@ -465,8 +453,7 @@ function renderImage() {
 // ---------- UI wiring ----------
 const $ = id => document.getElementById(id);
 const text = $("text"), font = $("font"), sizeSel = $("size"), bold = $("bold"), center = $("center");
-const bright = $("bright"), dither = $("dither"), dark = $("dark"), delay = $("delay"), speedSel = $("speed"), empty = $("empty");
-delay.addEventListener("input", () => $("delayVal").textContent = delay.value + " ms");
+const bright = $("bright"), dither = $("dither"), dark = $("dark"), speedSel = $("speed"), empty = $("empty");
 const connectBtn = $("connectBtn"), printBtn = $("printBtn");
 
 function setStatus(state, label) { $("led").className = "led " + state; $("statusText").textContent = label; }
@@ -484,7 +471,7 @@ document.querySelectorAll(".tabs button").forEach(btn => btn.addEventListener("c
   $("testPanel").hidden = mode !== "test";
   render();
 }));
-[text, font, sizeSel, bold, center, bright, dither, dark, delay, speedSel].forEach(el => el.addEventListener("input", render));
+[text, font, sizeSel, bold, center, bright, dither, dark, speedSel].forEach(el => el.addEventListener("input", render));
 bright.addEventListener("input", () => $("brightVal").textContent = bright.value);
 dark.addEventListener("input", () => $("darkVal").textContent = dark.value);
 $("file").addEventListener("change", e => {
