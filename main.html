@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>X6h Print</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --casing: #d9dee2;
+    --casing-deep: #c3cad0;
+    --paper: #ffffff;
+    --ink: #1c1f22;
+    --muted: #5d666e;
+    --accent: #2f5bd3;
+    --accent-ink: #ffffff;
+    --ok: #1f8a4c;
+    --warn: #b4441c;
+    --field: #eef1f3;
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --casing: #22272c; --casing-deep: #181c20; --ink: #e8ecef; --muted: #9aa4ad;
+      --field: #2d333a; --accent: #7a9cff; --accent-ink: #0d1530;
+    }
+  }
+  *, *::before, *::after { box-sizing: inherit; }
+  html, body { margin: 0; }
+  body {
+    background: var(--casing);
+    color: var(--ink);
+    font-family: "Bricolage Grotesque", -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-size: 17px;
+    line-height: 1.45;
+    -webkit-tap-highlight-color: transparent;
+  }
+  main { max-width: 440px; margin: 0 auto; padding: 20px 18px 120px; }
+
+  header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
+  h1 { font-size: 30px; font-weight: 800; letter-spacing: -0.02em; margin: 0; line-height: 1; }
+  .status { display: flex; align-items: center; gap: 8px; font-size: 15px; color: var(--muted); }
+  .led { width: 10px; height: 10px; border-radius: 50%; background: var(--casing-deep); box-shadow: inset 0 1px 2px rgba(0,0,0,.25); }
+  .led.on { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
+  .led.busy { background: #e0a100; box-shadow: 0 0 8px #e0a100; }
+
+  /* The paper slot: the one memorable element */
+  .slot {
+    background: var(--casing-deep);
+    border-radius: 14px 14px 0 0;
+    padding: 10px 22px 0;
+    box-shadow: inset 0 4px 8px rgba(0,0,0,.18);
+  }
+  .paper {
+    background: var(--paper);
+    padding: 14px 10px 26px;
+    max-height: 46vh;
+    overflow-y: auto;
+    position: relative;
+    clip-path: polygon(0 0, 100% 0, 100% calc(100% - 8px),
+      95% 100%, 90% calc(100% - 8px), 85% 100%, 80% calc(100% - 8px), 75% 100%, 70% calc(100% - 8px),
+      65% 100%, 60% calc(100% - 8px), 55% 100%, 50% calc(100% - 8px), 45% 100%, 40% calc(100% - 8px),
+      35% 100%, 30% calc(100% - 8px), 25% 100%, 20% calc(100% - 8px), 15% 100%, 10% calc(100% - 8px),
+      5% 100%, 0 calc(100% - 8px));
+  }
+  #preview { display: block; width: 100%; image-rendering: pixelated; }
+  .empty { color: #9aa1a7; text-align: center; padding: 30px 0; font-size: 15px; }
+
+  .controls { margin-top: 26px; display: grid; gap: 18px; }
+  .tabs { display: grid; grid-template-columns: 1fr 1fr; background: var(--field); border-radius: 12px; padding: 4px; }
+  .tabs button { border: 0; background: transparent; font: inherit; font-weight: 600; color: var(--muted); padding: 10px; border-radius: 9px; cursor: pointer; }
+  .tabs button[aria-selected="true"] { background: var(--paper); color: #1c1f22; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+
+  label { display: block; font-size: 15px; font-weight: 600; margin-bottom: 6px; }
+  textarea, select {
+    width: 100%; font: inherit; color: var(--ink); background: var(--field);
+    border: 2px solid transparent; border-radius: 12px; padding: 12px;
+  }
+  textarea { min-height: 120px; resize: vertical; }
+  textarea:focus, select:focus, button:focus-visible, input:focus-visible { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent); }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .range { display: grid; gap: 4px; }
+  .range-head { display: flex; justify-content: space-between; font-size: 15px; font-weight: 600; }
+  .range-head span:last-child { color: var(--muted); font-weight: 400; }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+  .file { display: block; text-align: center; background: var(--field); border: 2px dashed var(--casing-deep); border-radius: 12px; padding: 22px 12px; cursor: pointer; font-weight: 600; }
+  .file input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+  .check { display: flex; align-items: center; gap: 8px; font-weight: 400; margin: 0; }
+  [hidden] { display: none !important; }
+
+  .bar {
+    position: fixed; left: 0; right: 0; bottom: 0;
+    padding: 12px 18px calc(12px + env(safe-area-inset-bottom, 0px));
+    background: color-mix(in srgb, var(--casing) 88%, transparent);
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  }
+  .bar-inner { max-width: 440px; margin: 0 auto; display: grid; grid-template-columns: auto 1fr; gap: 10px; }
+  .btn { border: 0; font: inherit; font-weight: 700; border-radius: 14px; padding: 15px 18px; cursor: pointer; }
+  .btn.secondary { background: var(--field); color: var(--ink); }
+  .btn.primary { background: var(--accent); color: var(--accent-ink); }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .msg { font-size: 14px; color: var(--muted); min-height: 1.4em; text-align: center; margin-top: 10px; }
+  .msg.err { color: var(--warn); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>X6h Print</h1>
+    <div class="status"><span class="led" id="led"></span><span id="statusText">Not connected</span></div>
+  </header>
+
+  <div class="slot">
+    <div class="paper">
+      <canvas id="preview" width="384" height="1"></canvas>
+      <div class="empty" id="empty">Type something or pick an image to see it here.</div>
+    </div>
+  </div>
+
+  <section class="controls">
+    <div class="tabs" role="tablist">
+      <button role="tab" aria-selected="true" data-mode="text">Text</button>
+      <button role="tab" aria-selected="false" data-mode="image">Image</button>
+    </div>
+
+    <div id="textPanel">
+      <label for="text">Text</label>
+      <textarea id="text" placeholder="Shopping list, a note, a joke…"></textarea>
+      <div class="row" style="margin-top:12px">
+        <div>
+          <label for="font">Font</label>
+          <select id="font">
+            <option value='"Helvetica Neue", Arial, sans-serif'>Sans</option>
+            <option value='Georgia, "Times New Roman", serif'>Serif</option>
+            <option value='Menlo, "Courier New", monospace'>Mono</option>
+          </select>
+        </div>
+        <div>
+          <label for="size">Size</label>
+          <select id="size">
+            <option value="24">Small</option>
+            <option value="32" selected>Medium</option>
+            <option value="44">Large</option>
+            <option value="64">Huge</option>
+          </select>
+        </div>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <label class="check"><input type="checkbox" id="bold"> Bold</label>
+        <label class="check"><input type="checkbox" id="center"> Centered</label>
+      </div>
+    </div>
+
+    <div id="imagePanel" hidden>
+      <label class="file">Choose image<input type="file" id="file" accept="image/*"></label>
+      <div class="range" style="margin-top:14px">
+        <div class="range-head"><span>Brightness</span><span id="brightVal">0</span></div>
+        <input type="range" id="bright" min="-60" max="60" value="0">
+      </div>
+      <label class="check" style="margin-top:10px"><input type="checkbox" id="dither" checked> Dither (better for photos)</label>
+    </div>
+
+    <div class="range">
+      <div class="range-head"><span>Darkness</span><span id="darkVal">Medium</span></div>
+      <input type="range" id="dark" min="1" max="3" value="2" step="1">
+    </div>
+  </section>
+  <p class="msg" id="msg"></p>
+</main>
+
+<div class="bar">
+  <div class="bar-inner">
+    <button class="btn secondary" id="connectBtn">Connect</button>
+    <button class="btn primary" id="printBtn" disabled>Print</button>
+  </div>
+</div>
+
+<script>
+// ---------- Printer protocol (cat printer family: service AE30, write AE01, notify AE02) ----------
+const WIDTH = 384;                      // print head width in dots
+const SERVICE_ADV = 0xaf30, SERVICE = 0xae30, TX = 0xae01, RX = 0xae02;
+
+const CRC_TABLE = (() => {
+  const t = new Uint8Array(256);
+  for (let i = 0; i < 256; i++) {
+    let c = i;
+    for (let j = 0; j < 8; j++) c = (c & 0x80) ? ((c << 1) ^ 0x07) & 0xff : (c << 1) & 0xff;
+    t[i] = c;
+  }
+  return t;
+})();
+const crc8 = d => { let c = 0; for (const b of d) c = CRC_TABLE[(c ^ b) & 0xff]; return c; };
+
+// Packet: 51 78 CMD 00 LEN_LO LEN_HI DATA... CRC8(DATA) FF
+function packet(cmd, data) {
+  data = Uint8Array.from(data);
+  const p = new Uint8Array(8 + data.length);
+  p.set([0x51, 0x78, cmd, 0x00, data.length & 0xff, data.length >> 8]);
+  p.set(data, 6);
+  p[6 + data.length] = crc8(data);
+  p[7 + data.length] = 0xff;
+  return p;
+}
+const CMD = {
+  getState:     () => packet(0xa3, [0x00]),
+  quality200:   () => packet(0xa4, [0x32]),
+  energy:   (v)  => packet(0xaf, [v & 0xff, (v >> 8) & 0xff]),
+  applyEnergy:  () => packet(0xbe, [0x01]),
+  update:       () => packet(0xa9, [0x00]),
+  latticeStart: () => packet(0xa6, [0xaa,0x55,0x17,0x38,0x44,0x5f,0x5f,0x5f,0x44,0x38,0x2c]),
+  latticeEnd:   () => packet(0xa6, [0xaa,0x55,0x17,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x17]),
+  row:      (b)  => packet(0xa2, b),
+  feed:     (n)  => packet(0xa1, [n & 0xff, (n >> 8) & 0xff]),
+};
+const ENERGY = { 1: 8000, 2: 14000, 3: 22000 };
+
+// ---------- Bluetooth ----------
+let device = null, tx = null, paused = false;
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+async function connect() {
+  if (!navigator.bluetooth) {
+    return say("This browser can't use Bluetooth. On iPhone, open this page in the Bluefy app.", true);
+  }
+  try {
+    setStatus("busy", "Connecting…");
+    device = await navigator.bluetooth.requestDevice({
+      filters: [{ services: [SERVICE_ADV] }, { namePrefix: "X6" }],
+      optionalServices: [SERVICE],
+    });
+    device.addEventListener("gattserverdisconnected", onDisconnect);
+    const server = await device.gatt.connect();
+    const svc = await server.getPrimaryService(SERVICE);
+    tx = await svc.getCharacteristic(TX);
+    const rx = await svc.getCharacteristic(RX);
+    await rx.startNotifications();
+    rx.addEventListener("characteristicvaluechanged", onNotify);
+    setStatus("on", device.name || "Connected");
+    say("");
+    updateButtons();
+  } catch (e) {
+    setStatus("", "Not connected");
+    if (e.name !== "NotFoundError") say("Connection failed: " + e.message, true);
+  }
+}
+function onDisconnect() { tx = null; setStatus("", "Not connected"); updateButtons(); }
+
+// The printer sends 51 78 AE ... with 0x10 to ask us to pause, 0x00 to resume.
+function onNotify(ev) {
+  const v = new Uint8Array(ev.target.value.buffer);
+  if (v[0] === 0x51 && v[1] === 0x78 && v[2] === 0xae) paused = v[6] === 0x10;
+}
+
+async function send(bytes) {
+  while (paused) await sleep(20);
+  if (tx.writeValueWithoutResponse) await tx.writeValueWithoutResponse(bytes);
+  else await tx.writeValue(bytes);
+  await sleep(6);
+}
+
+// Pack one row of 384 pixels into 48 bytes. These printers read bits LSB-first.
+function packRow(bits, y) {
+  const out = new Uint8Array(WIDTH / 8);
+  const off = y * WIDTH;
+  for (let x = 0; x < WIDTH; x++) if (bits[off + x]) out[x >> 3] |= 1 << (x & 7);
+  return out;
+}
+
+async function print() {
+  if (!tx || !current) return;
+  const { bits, height } = current;
+  printBtn.disabled = true;
+  setStatus("busy", "Printing…");
+  try {
+    await send(CMD.getState());
+    await send(CMD.quality200());
+    await send(CMD.energy(ENERGY[dark.value]));
+    await send(CMD.applyEnergy());
+    await send(CMD.update());
+    await send(CMD.latticeStart());
+    for (let y = 0; y < height; y++) {
+      const row = packRow(bits, y);
+      // runs of blank rows are sent as paper feeds, which is much faster
+      if (row.every(b => b === 0)) {
+        let n = 1;
+        while (y + n < height && packRow(bits, y + n).every(b => b === 0)) n++;
+        await send(CMD.feed(n));
+        y += n - 1;
+      } else {
+        await send(CMD.row(row));
+      }
+      if (y % 40 === 0) say(`Printing… ${Math.round((y / height) * 100)}%`);
+    }
+    await send(CMD.feed(90));       // push the print past the tear bar
+    await send(CMD.latticeEnd());
+    await send(CMD.getState());
+    say("Printed.");
+  } catch (e) {
+    say("Printing stopped: " + e.message, true);
+  }
+  setStatus(tx ? "on" : "", tx ? (device.name || "Connected") : "Not connected");
+  updateButtons();
+}
+
+// ---------- Rendering ----------
+const preview = document.getElementById("preview");
+const pctx = preview.getContext("2d");
+let mode = "text", current = null, loadedImage = null;
+
+function render() {
+  const src = mode === "text" ? renderText() : renderImage();
+  if (!src) { current = null; preview.height = 1; empty.hidden = false; updateButtons(); return; }
+  empty.hidden = true;
+  const { canvas, threshold } = src;
+  const ctx = canvas.getContext("2d");
+  const { data } = ctx.getImageData(0, 0, WIDTH, canvas.height);
+  const n = WIDTH * canvas.height;
+  const gray = new Float32Array(n);
+  const b = mode === "image" ? Number(bright.value) : 0;
+  for (let i = 0; i < n; i++) {
+    const a = data[i * 4 + 3] / 255;   // transparent counts as white paper
+    const g = 0.299 * data[i*4] + 0.587 * data[i*4+1] + 0.114 * data[i*4+2];
+    gray[i] = g * a + 255 * (1 - a) + b;
+  }
+  const bits = new Uint8Array(n);
+  if (!threshold && dither.checked) {
+    for (let y = 0; y < canvas.height; y++) for (let x = 0; x < WIDTH; x++) {
+      const i = y * WIDTH + x, old = gray[i], val = old < 128 ? 0 : 255, err = old - val;
+      bits[i] = val === 0 ? 1 : 0;
+      if (x + 1 < WIDTH) gray[i + 1] += err * 7 / 16;
+      if (y + 1 < canvas.height) {
+        if (x > 0) gray[i + WIDTH - 1] += err * 3 / 16;
+        gray[i + WIDTH] += err * 5 / 16;
+        if (x + 1 < WIDTH) gray[i + WIDTH + 1] += err / 16;
+      }
+    }
+  } else {
+    for (let i = 0; i < n; i++) bits[i] = gray[i] < 128 ? 1 : 0;
+  }
+  current = { bits, height: canvas.height };
+  preview.height = canvas.height;
+  const out = pctx.createImageData(WIDTH, canvas.height);
+  for (let i = 0; i < n; i++) {
+    const v = bits[i] ? 28 : 255;
+    out.data.set([v, v, v, 255], i * 4);
+  }
+  pctx.putImageData(out, 0, 0);
+  updateButtons();
+}
+
+function renderText() {
+  const txt = text.value.replace(/\s+$/, "");
+  if (!txt) return null;
+  const size = Number(sizeSel.value);
+  const fontStr = `${bold.checked ? "700" : "400"} ${size}px ${font.value}`;
+  const m = document.createElement("canvas").getContext("2d");
+  m.font = fontStr;
+  const pad = 8, maxW = WIDTH - pad * 2, lines = [];
+  for (const para of txt.split("\n")) {
+    if (!para) { lines.push(""); continue; }
+    let line = "";
+    for (const word of para.split(/(\s+)/)) {
+      const test = line + word;
+      if (m.measureText(test).width > maxW && line.trim()) { lines.push(line.trimEnd()); line = word.trimStart(); }
+      else line = test;
+      while (m.measureText(line).width > maxW && line.length > 1) {   // very long words
+        let k = line.length; while (k > 1 && m.measureText(line.slice(0, k)).width > maxW) k--;
+        lines.push(line.slice(0, k)); line = line.slice(k);
+      }
+    }
+    lines.push(line);
+  }
+  const lh = Math.round(size * 1.25);
+  const c = document.createElement("canvas");
+  c.width = WIDTH; c.height = lines.length * lh + 8;
+  const ctx = c.getContext("2d");
+  ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, c.width, c.height);
+  ctx.fillStyle = "#000"; ctx.font = fontStr; ctx.textBaseline = "top";
+  ctx.textAlign = center.checked ? "center" : "left";
+  const x = center.checked ? WIDTH / 2 : pad;
+  lines.forEach((l, i) => ctx.fillText(l, x, i * lh + 4));
+  return { canvas: c, threshold: true };
+}
+
+function renderImage() {
+  if (!loadedImage) return null;
+  const h = Math.max(1, Math.round(loadedImage.height * WIDTH / loadedImage.width));
+  const c = document.createElement("canvas");
+  c.width = WIDTH; c.height = Math.min(h, 4000);
+  c.getContext("2d").drawImage(loadedImage, 0, 0, WIDTH, c.height);
+  return { canvas: c, threshold: false };
+}
+
+// ---------- UI wiring ----------
+const $ = id => document.getElementById(id);
+const text = $("text"), font = $("font"), sizeSel = $("size"), bold = $("bold"), center = $("center");
+const bright = $("bright"), dither = $("dither"), dark = $("dark"), empty = $("empty");
+const connectBtn = $("connectBtn"), printBtn = $("printBtn");
+
+function setStatus(state, label) { $("led").className = "led " + state; $("statusText").textContent = label; }
+function say(t, err) { const m = $("msg"); m.textContent = t; m.className = "msg" + (err ? " err" : ""); }
+function updateButtons() {
+  printBtn.disabled = !tx || !current;
+  connectBtn.textContent = tx ? "Disconnect" : "Connect";
+}
+
+document.querySelectorAll(".tabs button").forEach(btn => btn.addEventListener("click", () => {
+  mode = btn.dataset.mode;
+  document.querySelectorAll(".tabs button").forEach(b => b.setAttribute("aria-selected", b === btn));
+  $("textPanel").hidden = mode !== "text";
+  $("imagePanel").hidden = mode !== "image";
+  render();
+}));
+[text, font, sizeSel, bold, center, bright, dither].forEach(el => el.addEventListener("input", render));
+bright.addEventListener("input", () => $("brightVal").textContent = bright.value);
+dark.addEventListener("input", () => $("darkVal").textContent = ["", "Light", "Medium", "Dark"][dark.value]);
+$("file").addEventListener("change", e => {
+  const f = e.target.files[0]; if (!f) return;
+  const img = new Image();
+  img.onload = () => { loadedImage = img; render(); };
+  img.src = URL.createObjectURL(f);
+});
+connectBtn.addEventListener("click", () => {
+  if (tx && device) device.gatt.disconnect(); else connect();
+});
+printBtn.addEventListener("click", print);
+</script>
+</body>
+</html>
