@@ -170,8 +170,25 @@
     </div>
 
     <div class="range">
-      <div class="range-head"><span>Darkness</span><span id="darkVal">5</span></div>
-      <input type="range" id="dark" min="1" max="7" value="5" step="1">
+      <div class="range-head"><span>Darkness</span><span id="darkVal">4</span></div>
+      <input type="range" id="dark" min="1" max="7" value="4" step="1">
+    </div>
+
+    <div>
+      <label for="speed">Motor speed</label>
+      <select id="speed">
+        <option value="">Printer default</option>
+        <option value="8">8</option>
+        <option value="16">16</option>
+        <option value="32">32</option>
+        <option value="48">48</option>
+        <option value="64">64</option>
+      </select>
+    </div>
+
+    <div class="range">
+      <div class="range-head"><span>Delay between lines</span><span id="delayVal">0 ms</span></div>
+      <input type="range" id="delay" min="0" max="20" value="0" step="1">
     </div>
   </section>
   <p class="msg" id="msg"></p>
@@ -221,11 +238,11 @@ const CMD = {
   latticeEnd:   () => packet(0xa6, [0xaa,0x55,0x17,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x17]),
   row:      (b)  => packet(0xa2, b),
   feed:     (n)  => packet(0xa1, [n & 0xff, (n >> 8) & 0xff]),
+  speed:    (v)  => packet(0xbd, [v & 0xff]),
 };
 // Darkness 1–7, like the original app. Higher energy = hotter head = darker print.
 const ENERGY = { 1: 8000, 2: 14000, 3: 22000, 4: 32000, 5: 42000, 6: 54000, 7: 65000 };
-// Darker settings need the head to dwell longer per line, so send rows more slowly.
-const ROW_DELAY = { 1: 6, 2: 7, 3: 9, 4: 11, 5: 14, 6: 17, 7: 20 };
+
 
 // ---------- Bluetooth ----------
 let device = null, tx = null, paused = false;
@@ -282,7 +299,7 @@ async function send(bytes) {
   while (paused) await sleep(20);
   if (tx.writeValueWithoutResponse) await tx.writeValueWithoutResponse(bytes);
   else await tx.writeValue(bytes);
-  await sleep(pace);
+  if (pace > 0) await sleep(pace);
 }
 
 // Pack one row of 384 pixels into 48 bytes. These printers read bits LSB-first.
@@ -304,9 +321,10 @@ async function print() {
     await send(CMD.quality200());
     await send(CMD.energy(ENERGY[dark.value]));
     await send(CMD.applyEnergy());
+    if (speedSel.value) await send(CMD.speed(Number(speedSel.value)));
     await send(CMD.update());
     await send(CMD.latticeStart());
-    pace = ROW_DELAY[dark.value];
+    pace = Number(delay.value);
     for (let y = 0; y < height; y++) {
       const row = packRow(bits, y);
       // runs of blank rows are sent as paper feeds, which is much faster
@@ -418,8 +436,8 @@ function renderTest() {
   const ctx = c.getContext("2d");
   ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, c.width, c.height);
   ctx.fillStyle = "#000"; ctx.textBaseline = "middle";
-  ctx.font = '700 26px "Helvetica Neue", Arial, sans-serif';
-  ctx.fillText(`Darkness ${dark.value}`, 8, head / 2);
+  ctx.font = '700 20px "Helvetica Neue", Arial, sans-serif';
+  ctx.fillText(`Dark ${dark.value}, speed ${speedSel.value || "default"}, delay ${delay.value} ms`, 8, head / 2);
   ctx.font = '700 22px "Helvetica Neue", Arial, sans-serif';
   for (let i = 0; i < steps; i++) {
     const pct = i * 10, y = head + i * band;
@@ -444,7 +462,8 @@ function renderImage() {
 // ---------- UI wiring ----------
 const $ = id => document.getElementById(id);
 const text = $("text"), font = $("font"), sizeSel = $("size"), bold = $("bold"), center = $("center");
-const bright = $("bright"), dither = $("dither"), dark = $("dark"), empty = $("empty");
+const bright = $("bright"), dither = $("dither"), dark = $("dark"), delay = $("delay"), speedSel = $("speed"), empty = $("empty");
+delay.addEventListener("input", () => $("delayVal").textContent = delay.value + " ms");
 const connectBtn = $("connectBtn"), printBtn = $("printBtn");
 
 function setStatus(state, label) { $("led").className = "led " + state; $("statusText").textContent = label; }
@@ -462,7 +481,7 @@ document.querySelectorAll(".tabs button").forEach(btn => btn.addEventListener("c
   $("testPanel").hidden = mode !== "test";
   render();
 }));
-[text, font, sizeSel, bold, center, bright, dither, dark].forEach(el => el.addEventListener("input", render));
+[text, font, sizeSel, bold, center, bright, dither, dark, delay, speedSel].forEach(el => el.addEventListener("input", render));
 bright.addEventListener("input", () => $("brightVal").textContent = bright.value);
 dark.addEventListener("input", () => $("darkVal").textContent = dark.value);
 $("file").addEventListener("change", e => {
