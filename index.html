@@ -71,7 +71,7 @@
   .empty { color: #9aa1a7; text-align: center; padding: 30px 0; font-size: 15px; }
 
   .controls { margin-top: 26px; display: grid; gap: 18px; }
-  .tabs { display: grid; grid-template-columns: 1fr 1fr; background: var(--field); border-radius: 12px; padding: 4px; }
+  .tabs { display: grid; grid-template-columns: 1fr 1fr 1fr; background: var(--field); border-radius: 12px; padding: 4px; }
   .tabs button { border: 0; background: transparent; font: inherit; font-weight: 600; color: var(--muted); padding: 10px; border-radius: 9px; cursor: pointer; }
   .tabs button[aria-selected="true"] { background: var(--paper); color: #1c1f22; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
 
@@ -125,6 +125,11 @@
     <div class="tabs" role="tablist">
       <button role="tab" aria-selected="true" data-mode="text">Text</button>
       <button role="tab" aria-selected="false" data-mode="image">Image</button>
+      <button role="tab" aria-selected="false" data-mode="test">Test strip</button>
+    </div>
+
+    <div id="testPanel" hidden>
+      <p style="margin:0;color:var(--muted);font-size:15px">Prints 11 bands from 0% (white) to 100% (black). The darkness setting is printed at the top, so you can print a few and compare them.</p>
     </div>
 
     <div id="textPanel">
@@ -332,7 +337,7 @@ const pctx = preview.getContext("2d");
 let mode = "text", current = null, loadedImage = null;
 
 function render() {
-  const src = mode === "text" ? renderText() : renderImage();
+  const src = mode === "text" ? renderText() : mode === "image" ? renderImage() : renderTest();
   if (!src) { current = null; preview.height = 1; empty.hidden = false; updateButtons(); return; }
   empty.hidden = true;
   const { canvas, threshold } = src;
@@ -347,7 +352,7 @@ function render() {
     gray[i] = g * a + 255 * (1 - a) + b;
   }
   const bits = new Uint8Array(n);
-  if (!threshold && dither.checked) {
+  if (!threshold && (mode === "test" || dither.checked)) {
     for (let y = 0; y < canvas.height; y++) for (let x = 0; x < WIDTH; x++) {
       const i = y * WIDTH + x, old = gray[i], val = old < 128 ? 0 : 255, err = old - val;
       bits[i] = val === 0 ? 1 : 0;
@@ -406,6 +411,27 @@ function renderText() {
   return { canvas: c, threshold: true };
 }
 
+function renderTest() {
+  const steps = 11, band = 40, head = 44, labelW = 76;
+  const c = document.createElement("canvas");
+  c.width = WIDTH; c.height = head + steps * band + 8;
+  const ctx = c.getContext("2d");
+  ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, c.width, c.height);
+  ctx.fillStyle = "#000"; ctx.textBaseline = "middle";
+  ctx.font = '700 26px "Helvetica Neue", Arial, sans-serif';
+  ctx.fillText(`Darkness ${dark.value}`, 8, head / 2);
+  ctx.font = '700 22px "Helvetica Neue", Arial, sans-serif';
+  for (let i = 0; i < steps; i++) {
+    const pct = i * 10, y = head + i * band;
+    ctx.fillStyle = "#000";
+    ctx.fillText(`${pct}%`, 8, y + band / 2);
+    const g = Math.round(255 * (1 - pct / 100));
+    ctx.fillStyle = `rgb(${g},${g},${g})`;
+    ctx.fillRect(labelW, y + 2, WIDTH - labelW, band - 4);   // thin white gap between bands
+  }
+  return { canvas: c, threshold: false };
+}
+
 function renderImage() {
   if (!loadedImage) return null;
   const h = Math.max(1, Math.round(loadedImage.height * WIDTH / loadedImage.width));
@@ -433,9 +459,10 @@ document.querySelectorAll(".tabs button").forEach(btn => btn.addEventListener("c
   document.querySelectorAll(".tabs button").forEach(b => b.setAttribute("aria-selected", b === btn));
   $("textPanel").hidden = mode !== "text";
   $("imagePanel").hidden = mode !== "image";
+  $("testPanel").hidden = mode !== "test";
   render();
 }));
-[text, font, sizeSel, bold, center, bright, dither].forEach(el => el.addEventListener("input", render));
+[text, font, sizeSel, bold, center, bright, dither, dark].forEach(el => el.addEventListener("input", render));
 bright.addEventListener("input", () => $("brightVal").textContent = bright.value);
 dark.addEventListener("input", () => $("darkVal").textContent = dark.value);
 $("file").addEventListener("change", e => {
