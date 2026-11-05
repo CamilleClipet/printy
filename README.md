@@ -61,6 +61,19 @@ npm run preview   # serve the built version on https://localhost:4173
 
 `app/dist/` is a static site that uses relative paths, so it can be served from any host or subfolder. To test the built version on your phone, point the tunnel at port 4173 instead of 5173.
 
+## Tests
+
+From `app/`:
+
+```sh
+npm test             # run tests once
+npm run test:watch   # watch for changes
+npm run typecheck    # type-check without building
+npm run lint         # ESLint (TypeScript, React hooks, unhandled promises)
+```
+
+CI runs lint, typecheck, tests and the production build on every push and pull request.
+
 ## Project structure
 
 ```
