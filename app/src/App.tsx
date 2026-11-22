@@ -5,7 +5,9 @@ import { renderImage } from "./render/renderImage";
 import { renderTest } from "./render/renderTest";
 import { renderText } from "./render/renderText";
 import type { RenderedPrint } from "./render/types";
+import { loadSavedImage, saveImage } from "./imageStore";
 import { addPadding, SPACING_LABELS, type Spacing } from "./render/padding";
+import { clampPaperMm, DEFAULT_PAPER_MM, MAX_PAPER_MM, MIN_PAPER_MM, PAPER_PRESETS, printWidthDots } from "./printer/paper";
 
 type Mode = "text" | "image" | "test";
 type FontOption = '"Helvetica Neue", Arial, sans-serif' | 'Georgia, "Times New Roman", serif' | 'Menlo, "Courier New", monospace';
@@ -27,6 +29,7 @@ const DEFAULT_DRAFT: Draft = {
   topSpace: "small", bottomSpace: "small", darkness: 4, mode: "text",
 };
 const DRAFT_KEY = "printy-draft-v1";
+const PAPER_MM_KEY = "printy-paper-mm";
 const isSpacing = (value: unknown): value is Spacing => value === "small" || value === "medium" || value === "large";
 const isFont = (value: unknown): value is FontOption => value === '"Helvetica Neue", Arial, sans-serif' || value === 'Georgia, "Times New Roman", serif' || value === 'Menlo, "Courier New", monospace';
 
@@ -53,6 +56,18 @@ function readDraft(): Draft {
     };
   } catch {
     return DEFAULT_DRAFT;
+  }
+}
+
+function readPaperMm(): number {
+  try {
+    const value: unknown = JSON.parse(localStorage.getItem(PAPER_MM_KEY) ?? "null");
+    if (typeof value !== "number" || !Number.isFinite(value) || value < MIN_PAPER_MM || value > MAX_PAPER_MM) {
+      return DEFAULT_PAPER_MM;
+    }
+    return clampPaperMm(value);
+  } catch {
+    return DEFAULT_PAPER_MM;
   }
 }
 
@@ -88,6 +103,35 @@ export default function App() {
   const [message, setMessage] = useState("");
   const [messageError, setMessageError] = useState(false);
   const [printing, setPrinting] = useState(false);
+  const [paperMm, setPaperMm] = useState(readPaperMm);
+  const [customPaper, setCustomPaper] = useState(() => !PAPER_PRESETS.some((preset) => preset === paperMm));
+  const [customPaperInput, setCustomPaperInput] = useState(String(paperMm));
+  const width = printWidthDots(paperMm);
+
+  useEffect(() => {
+    try { localStorage.setItem(PAPER_MM_KEY, JSON.stringify(paperMm)); }
+    catch { /* Storage can be unavailable; the in-memory setting still works. */ }
+  }, [paperMm]);
+
+  const choosePaperPreset = (value: number) => {
+    setCustomPaper(false);
+    setCustomPaperInput(String(value));
+    setPaperMm(value);
+  };
+  const chooseCustomPaper = () => {
+    setCustomPaper(true);
+    setCustomPaperInput(String(paperMm));
+  };
+  const commitCustomPaper = () => {
+    const value = Number(customPaperInput);
+    if (!Number.isFinite(value) || customPaperInput.trim() === "") {
+      setCustomPaperInput(String(paperMm));
+      return;
+    }
+    const clamped = clampPaperMm(value);
+    setPaperMm(clamped);
+    setCustomPaperInput(String(clamped));
+  };
 
   useEffect(() => {
     try {
@@ -114,10 +158,10 @@ export default function App() {
 
   useEffect(() => {
     const textSource = mode === "text"
-      ? renderText({ text, size, bold, italic, underline, strike, font, align, rotated, lineSpacing })
+      ? renderText({ text, size, bold, italic, underline, strike, font, align, rotated, lineSpacing, width })
       : null;
     setActualSize(textSource?.size ?? null);
-    const rawSource = mode === "text" ? textSource : mode === "image" ? renderImage(image) : renderTest(darkness);
+    const rawSource = mode === "text" ? textSource : mode === "image" ? renderImage(image, width) : renderTest(darkness, width);
     const src = rawSource && mode !== "test" ? addPadding(rawSource, topSpace, bottomSpace) : rawSource;
     const canvas = canvasRef.current;
     if (!src) {
@@ -128,9 +172,10 @@ export default function App() {
     const rendered = convertToBits(src);
     setCurrent(rendered);
     if (!canvas) return;
+    canvas.width = rendered.width;
     canvas.height = rendered.height;
     const ctx = canvas.getContext("2d")!;
-    const out = ctx.createImageData(384, rendered.height);
+    const out = ctx.createImageData(rendered.width, rendered.height);
     for (let i = 0; i < rendered.bits.length; i++) {
       const v = rendered.bits[i] ? 28 : 255;
       out.data.set([v, v, v, 255], i * 4);
@@ -138,7 +183,7 @@ export default function App() {
     ctx.putImageData(out, 0, 0);
     const fullCanvas = fullCanvasRef.current;
     if (fullCanvas) {
-      fullCanvas.width = 384;
+      fullCanvas.width = rendered.width;
       fullCanvas.height = rendered.height;
       fullCanvas.getContext("2d")?.putImageData(out, 0, 0);
     }
@@ -149,7 +194,7 @@ export default function App() {
         if (paper) paper.scrollTop = paper.scrollHeight;
       });
     }
-  }, [mode, text, size, bold, italic, underline, strike, font, align, rotated, lineSpacing, darkness, image, topSpace, bottomSpace]);
+  }, [mode, text, size, bold, italic, underline, strike, font, align, rotated, lineSpacing, darkness, image, topSpace, bottomSpace, width]);
 
   useEffect(() => {
     if (!fullScreen) return;
@@ -165,14 +210,34 @@ export default function App() {
     if (image?.src.startsWith("blob:")) URL.revokeObjectURL(image.src);
   }, [image]);
 
-  const chooseImage = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    const objectUrl = URL.createObjectURL(file);
+  const showImage = (blob: Blob, onLoad?: () => void) => {
+    const objectUrl = URL.createObjectURL(blob);
     const loaded = new Image();
-    loaded.onload = () => setImage(loaded);
+    loaded.onload = () => { setImage(loaded); onLoad?.(); };
     loaded.onerror = () => URL.revokeObjectURL(objectUrl);
     loaded.src = objectUrl;
+  };
+
+  // Restore the last chosen image (the browser may reload the page when you leave it).
+  const restoredImage = useRef(false);
+  useEffect(() => {
+    if (restoredImage.current) return;
+    restoredImage.current = true;
+    void loadSavedImage().then((blob) => {
+      if (blob) setImage((existing) => { if (!existing) showImage(blob); return existing; });
+    });
+  }, []);
+
+  const chooseImage = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = ""; // allow picking the same file again after removing it
+    if (!file) return;
+    showImage(file, () => void saveImage(file));
+  };
+
+  const removeImage = () => {
+    setImage(null);
+    void saveImage(null);
   };
 
   const updateText = (event: ChangeEvent<HTMLTextAreaElement>) => {
@@ -181,6 +246,31 @@ export default function App() {
     const wasAtBottom = Boolean(paper && paper.scrollHeight - paper.scrollTop - paper.clientHeight < 24);
     pendingScrollToBottom.current = nextText.length > text.length && wasAtBottom && document.activeElement === event.target;
     setText(nextText);
+  };
+
+  const scrollToEditor = () => {
+    if (mode === "text") document.getElementById("text")?.scrollIntoView({ behavior: "smooth", block: "center" });
+    else if (mode === "image") document.getElementById("imagePanel")?.scrollIntoView({ behavior: "smooth", block: "center" });
+  };
+
+  const save = () => {
+    const canvas = canvasRef.current;
+    if (!current || !canvas) return;
+    canvas.toBlob((blob) => {
+      if (!blob) { setMessage("Couldn't create the image."); setMessageError(true); return; }
+      const stamp = new Date().toISOString().slice(0, 19).replace(/[-:]/g, "").replace("T", "-");
+      const file = new File([blob], `printy-${stamp}.png`, { type: "image/png" });
+      // On phones, the share sheet is the reliable way to save to Photos/Files (in-app browsers often ignore downloads).
+      if (matchMedia("(pointer: coarse)").matches && navigator.canShare?.({ files: [file] })) {
+        navigator.share({ files: [file] }).catch(() => { /* user cancelled */ });
+        return;
+      }
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url; link.download = file.name;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }, "image/png");
   };
 
   const connect = () => {
@@ -192,7 +282,7 @@ export default function App() {
     if (!current || !connected || printing) return;
     setPrinting(true);
     try {
-      await printerRef.current?.print(current.bits, current.height, darkness, (percent) => { setMessage(`Printing… ${percent}%`); setMessageError(false); });
+      await printerRef.current?.print(current.bits, current.height, current.width, darkness, (percent) => { setMessage(`Printing… ${percent}%`); setMessageError(false); });
     } finally {
       setPrinting(false);
     }
@@ -207,30 +297,54 @@ export default function App() {
             <div className="mode-tabs" role="tablist" aria-label="Mode">
               <button role="tab" aria-selected={mode === "text"} aria-label="Text" title="Text" onClick={() => setMode("text")}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6V4h14v2M12 4v16M9 20h6" /></svg></button>
               <button role="tab" aria-selected={mode === "image"} aria-label="Image" title="Image" onClick={() => setMode("image")}><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="9" cy="9.5" r="1.8" /><path d="m21 16-5-5-9 9" /></svg></button>
-              <button role="tab" aria-selected={mode === "test"} aria-label="Settings" title="Settings" onClick={() => setMode("test")}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8" /><circle cx="16" cy="7" r="2" /><circle cx="10" cy="17" r="2" /></svg></button>
+              <button role="tab" aria-selected={mode === "test"} aria-label="Settings" title="Settings" onClick={() => setMode("test")}><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" /></svg></button>
             </div>
           </div>
           <div className="status" title={status.label}><span className={`led ${status.state}`} id="led"></span><span id="statusText">{status.label}</span></div>
         </header>
 
-        <div className="slot">
-          <button className="preview-expand" aria-label="Full-screen preview" title="Full-screen preview" onClick={() => setFullScreen(true)}>
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H3v5M16 3h5v5M21 16v5h-5M3 16v5h5" /></svg>
-          </button>
-          <div className="paper" ref={paperRef}>
-            <canvas className="preview" id="preview" ref={canvasRef} width="384" height="1"></canvas>
-            {!current && <div className="empty" id="empty">Type something or pick an image to see it here.</div>}
+          <div className="paper-width-control settings-paper-width" hidden={mode !== "test"}>
+            <span className="paper-width-label" id="paperWidthLabel">Paper width</span>
+            <div className="segments paper-width-segments" role="group" aria-labelledby="paperWidthLabel">
+              {PAPER_PRESETS.map((preset) => <button key={preset} type="button" aria-pressed={!customPaper && paperMm === preset} onClick={() => choosePaperPreset(preset)}>{preset} mm</button>)}
+              <button type="button" aria-pressed={customPaper} onClick={chooseCustomPaper}>Custom</button>
+            </div>
+            {customPaper && <div className="custom-paper-input">
+              <label htmlFor="customPaperMm">Custom width (mm)</label>
+              <input id="customPaperMm" type="number" min={MIN_PAPER_MM} max={MAX_PAPER_MM} step="1" value={customPaperInput} onChange={(event) => setCustomPaperInput(event.target.value)} onBlur={commitCustomPaper} onKeyDown={(event) => { if (event.key === "Enter") { commitCustomPaper(); event.currentTarget.blur(); } }} />
+            </div>}
+            <p className="paper-width-hint">Prints {width} dots wide ({width / 8} mm printable).</p>
+            <p className="paper-width-note"><span aria-hidden="true">⚠</span> Must match your printer’s print head. A wrong width can print garbled output.</p>
+          </div>
+
+        <div className="paper-preview">
+          {mode === "test" && <div className="paper-width-row"><span className="paper-width-label">Test strip</span></div>}
+          <div className="paper-width-row" hidden={mode === "test"}>
+            <button className="paper-width-chip" type="button" aria-label={`Paper width ${paperMm} mm, change in settings`} title="Change paper width" onClick={() => setMode("test")}>
+              <span>{paperMm} mm</span>
+            </button>
+          </div>
+          <div className="slot">
+            {mode !== "test" && <button className="preview-expand" aria-label="Full-screen preview" title="Full-screen preview" onClick={() => setFullScreen(true)}>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H3v5M16 3h5v5M21 16v5h-5M3 16v5h5" /></svg>
+            </button>}
+            <div className={`paper${mode === "text" || mode === "image" ? " paper-clickable" : ""}`} ref={paperRef} onClick={mode === "text" || mode === "image" ? scrollToEditor : undefined}>
+              <canvas className="preview" id="preview" ref={canvasRef} width={width} height="1"></canvas>
+              {!current && <div className="empty" id="empty">{mode === "image" ? "Pick an image to see it here." : "Type something to see it here."}</div>}
+            </div>
           </div>
         </div>
 
         <section className="controls">
 
           <div id="settingsPanel" hidden={mode !== "test"}>
-            <div className="range">
-              <div className="range-head"><span>Darkness</span><span id="darkVal">{darkness}</span></div>
-              <input type="range" id="dark" min="1" max="4" value={darkness} step="1" onChange={(event) => setDarkness(Number(event.target.value) as 1 | 2 | 3 | 4)} />
+            <div className="test-strip-control">
+              <div className="range">
+                <div className="range-head"><span>Darkness</span><span id="darkVal">{darkness}</span></div>
+                <input type="range" id="dark" min="1" max="4" value={darkness} step="1" onChange={(event) => setDarkness(Number(event.target.value) as 1 | 2 | 3 | 4)} />
+              </div>
+              <p className="test-strip-hint">Test strip prints 11 bands from 0% (white) to 100% (black). Compare a few strips to find the darkness that looks best.</p>
             </div>
-            <p style={{ margin: "4px 0 0", color: "var(--muted)", fontSize: 15 }}>Test strip prints 11 bands from 0% (white) to 100% (black). Compare a few strips to find the darkness that looks best.</p>
           </div>
 
           <div id="textPanel" hidden={mode !== "text"}>
@@ -246,12 +360,18 @@ export default function App() {
             </div>
             <FormatToolbar bold={bold} italic={italic} underline={underline} strike={strike} align={align} rotated={rotated} size={size} onSize={setSize} lineSpacing={lineSpacing} onBold={() => setBold(!bold)} onItalic={() => setItalic(!italic)} onUnderline={() => setUnderline(!underline)} onStrike={() => setStrike(!strike)} onAlign={setAlign} onRotate={() => setRotated(!rotated)} onLineSpacing={setLineSpacing} />
             {actualSize !== null && actualSize < size && <p className="shrink-hint">Shrunk to {actualSize}px to fit the paper width.</p>}
-            <textarea id="text" aria-label="Text to print" placeholder="Type something to print…" value={text} onChange={updateText} onFocus={revealTextarea} onBlur={() => document.body.classList.remove("typing")} />
+            <div className="text-wrap">
+              <textarea id="text" aria-label="Text to print" placeholder="Type something to print…" value={text} onChange={updateText} onFocus={revealTextarea} onBlur={() => document.body.classList.remove("typing")} />
+              {text && <button type="button" className="clear-text" aria-label="Clear all text" title="Clear all text" onClick={() => { if (text.length < 40 || confirm("Clear all text?")) setText(""); }}>Clear</button>}
+            </div>
           </div>
 
           <div id="imagePanel" hidden={mode !== "image"}>
-            <label className="file">Choose image<input type="file" id="file" accept="image/*" onChange={chooseImage} /></label>
-            <p style={{ margin: "10px 0 0", color: "var(--muted)", fontSize: 15 }}>Prints in pure black and white. For crisp results, use an image already dithered at 384 pixels wide.</p>
+            <div className="image-actions">
+              <label className="file">{image ? "Change image" : "Choose image"}<input type="file" id="file" accept="image/*" onChange={chooseImage} /></label>
+              {image && <button type="button" className="btn secondary discard-image" onClick={removeImage}>Remove image</button>}
+            </div>
+            <p style={{ margin: "10px 0 0", color: "var(--muted)", fontSize: 15 }}>Prints in pure black and white. For crisp results, use an image already dithered at {width} pixels wide.</p>
           </div>
 
         </section>
@@ -259,9 +379,10 @@ export default function App() {
       </main>
 
       <div className="bar">
-        <div className="bar-inner">
+        <div className={`bar-inner${mode === "test" ? " no-save" : ""}`}>
           <button className="btn secondary" id="connectBtn" onClick={connect}>{connected ? "Disconnect" : "Connect"}</button>
           <button className="btn primary" id="printBtn" disabled={!connected || !current || printing} onClick={() => void print()}>Print</button>
+          {mode !== "test" && <button className="btn secondary" id="saveBtn" disabled={!current} onClick={save}>Save</button>}
         </div>
       </div>
 
@@ -272,7 +393,7 @@ export default function App() {
             <button className="close-preview" aria-label="Close full-screen preview" onClick={() => setFullScreen(false)}>×</button>
           </div>
           {mode === "text" && <FormatToolbar bold={bold} italic={italic} underline={underline} strike={strike} align={align} rotated={rotated} size={size} onSize={setSize} lineSpacing={lineSpacing} onBold={() => setBold(!bold)} onItalic={() => setItalic(!italic)} onUnderline={() => setUnderline(!underline)} onStrike={() => setStrike(!strike)} onAlign={setAlign} onRotate={() => setRotated(!rotated)} onLineSpacing={setLineSpacing} />}
-          <div className="full-paper">{current ? <canvas ref={fullCanvasRef} className="full-preview" width="384" height="1" /> : <p className="empty">Nothing to preview yet.</p>}</div>
+          <div className="full-paper">{current ? <canvas ref={fullCanvasRef} className="full-preview" width={current.width} height="1" /> : <p className="empty">Nothing to preview yet.</p>}</div>
           <SpacingControl label="Top space" value={topSpace} onChange={setTopSpace} />
           <SpacingControl label="Bottom space" value={bottomSpace} onChange={setBottomSpace} />
         </div>

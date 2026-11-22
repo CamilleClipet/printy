@@ -1,5 +1,7 @@
 // Cat printer family: service AE30, write AE01, notify AE02.
-export const WIDTH = 384;
+import { DEFAULT_PAPER_MM, printWidthDots } from "./paper";
+
+export const WIDTH = printWidthDots(DEFAULT_PAPER_MM);
 
 export const uuid = (s: string): string => `0000${s}-0000-1000-8000-00805f9b34fb`;
 export const SERVICE_ADV = uuid("af30");
@@ -51,10 +53,10 @@ export const CMD = {
 export const ENERGY: Record<1 | 2 | 3 | 4, number> = { 1: 4000, 2: 6500, 3: 9000, 4: 12000 };
 export const MOTOR_SPEED = 4;
 
-// Pack one row of 384 pixels into 48 bytes. These printers read bits LSB-first.
-export function packRow(bits: Uint8Array, y: number): Uint8Array<ArrayBuffer> {
-  const out = new Uint8Array(WIDTH / 8);
-  const off = y * WIDTH;
-  for (let x = 0; x < WIDTH; x++) if (bits[off + x]) out[x >> 3] |= 1 << (x & 7);
+// Pack one row into bytes. These printers read bits LSB-first.
+export function packRow(bits: Uint8Array, y: number, width = WIDTH): Uint8Array<ArrayBuffer> {
+  const out = new Uint8Array(width / 8);
+  const off = y * width;
+  for (let x = 0; x < width; x++) if (bits[off + x]) out[x >> 3] |= 1 << (x & 7);
   return out;
 }

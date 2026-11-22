@@ -19,6 +19,7 @@ export type TextOptions = {
   rotated?: boolean;
   /** Line spacing multiplier: 1 (normal), 1.5 or 2 (double). */
   lineSpacing?: number;
+  width?: number;
 };
 
 export type TextRender = RenderSource & {
@@ -53,18 +54,19 @@ const fontString = (o: TextOptions, size: number) => `${o.italic ? "italic " : "
 function layout(o: TextOptions, txt: string, size: number) {
   const m = document.createElement("canvas").getContext("2d")!;
   m.font = fontString(o, size);
-  const maxW = (o.rotated ? ROTATED_LINE_LENGTH : WIDTH) - PAD * 2;
+  const maxW = (o.rotated ? ROTATED_LINE_LENGTH : (o.width ?? WIDTH)) - PAD * 2;
   return { lines: wrapLines(m, txt, maxW), m };
 }
 
 export function renderText(o: TextOptions): TextRender | null {
+  const width = o.width ?? WIDTH;
   const txt = o.text.replace(/\s+$/, "");
   if (!txt) return null;
 
   let size = o.size;
   let { lines, m } = layout(o, txt, size);
   if (o.rotated) { // stacked lines must fit across the paper width
-    while (size > 8 && lines.length * lineHeight(size, o.lineSpacing) + 8 > WIDTH) {
+    while (size > 8 && lines.length * lineHeight(size, o.lineSpacing) + 8 > width) {
       size--;
       ({ lines, m } = layout(o, txt, size));
     }
@@ -73,7 +75,7 @@ export function renderText(o: TextOptions): TextRender | null {
   const blockH = lines.length * lh + 8;
   const blockW = o.rotated
     ? Math.min(ROTATED_LINE_LENGTH, Math.ceil(Math.max(...lines.map((l) => m.measureText(l).width))) + PAD * 2)
-    : WIDTH;
+    : width;
 
   const c = document.createElement("canvas");
   c.width = blockW; c.height = blockH;
@@ -97,10 +99,10 @@ export function renderText(o: TextOptions): TextRender | null {
 
   // Rotate 90° counter-clockwise: lines run along the paper, stacked across its width.
   const r = document.createElement("canvas");
-  r.width = WIDTH; r.height = blockW;
+  r.width = width; r.height = blockW;
   const rc = r.getContext("2d")!;
   rc.fillStyle = "#fff"; rc.fillRect(0, 0, r.width, r.height);
-  const offset = Math.max(0, Math.floor((WIDTH - blockH) / 2)); // center the block across the paper
+  const offset = Math.max(0, Math.floor((width - blockH) / 2)); // center the block across the paper
   rc.translate(offset, blockW);
   rc.rotate(-Math.PI / 2);
   rc.drawImage(c, 0, 0);
