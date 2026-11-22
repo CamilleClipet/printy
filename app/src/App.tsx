@@ -9,6 +9,8 @@ import { loadSavedImage, saveImage } from "./imageStore";
 import { addPadding, SPACING_LABELS, type Spacing } from "./render/padding";
 import { clampPaperMm, DEFAULT_PAPER_MM, MAX_PAPER_MM, MIN_PAPER_MM, PAPER_PRESETS, printWidthDots } from "./printer/paper";
 import { saveOrShareImage } from "./platform";
+import { registerNativeBackDismiss } from "./platform/native/backDismissRegistry";
+import { hideNativeSplash } from "./platform/native/shell";
 
 type Mode = "text" | "image" | "test";
 type FontOption = '"Helvetica Neue", Arial, sans-serif' | 'Georgia, "Times New Roman", serif' | 'Menlo, "Courier New", monospace';
@@ -146,8 +148,15 @@ export default function App() {
       if (event.key === "Escape") setFullScreen(false);
     };
     window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    // Android back button closes the full-screen preview before anything else.
+    const unregister = registerNativeBackDismiss(20, () => { setFullScreen(false); return true; });
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      unregister();
+    };
   }, [fullScreen]);
+
+  useEffect(() => hideNativeSplash(), []);
 
   if (!printerRef.current) {
     printerRef.current = new Printer({
@@ -414,9 +423,11 @@ function FormatToolbar({ size, onSize, bold, italic, underline, strike, align, r
     };
     document.addEventListener("pointerdown", onPointerDown);
     document.addEventListener("keydown", onKeyDown);
+    const unregister = registerNativeBackDismiss(10, () => { setOpenMenu(null); return true; });
     return () => {
       document.removeEventListener("pointerdown", onPointerDown);
       document.removeEventListener("keydown", onKeyDown);
+      unregister();
     };
   }, [openMenu]);
 

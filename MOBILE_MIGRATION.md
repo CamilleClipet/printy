@@ -85,6 +85,11 @@ What to test
 
 ## Phase 1 — Add Capacitor, first boot on devices
 
+Status: **code done** on branch `mobile_migration_phase1` (Capacitor 8.6, `fr.camilleclipet.printy`). Lint, typecheck, 24 tests,
+web build, `./gradlew assembleDebug` and the iOS simulator build are green. The app boots on the iOS simulator in light and dark mode
+(status bar follows the theme, safe areas OK, bundled font). Still to do: the store id reservations (step 1), real-device checks, keyboard
+tuning (step 10, `revealTextarea` unchanged so far), and the Android back button and older Android versions.
+
 Steps
 1. Names and app id (decide **now**; the app id can't change after the first store release):
    - Store listing title: **"Printy: Thermal Printer"** on both stores. Home-screen name (`appName`): **"Printy"**.

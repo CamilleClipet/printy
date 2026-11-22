@@ -2,28 +2,26 @@
   <rect width="1024" height="1024" fill="#2f5bd3"/>
   <g stroke-linejoin="round">
     <!-- Soft, compact receipt printer -->
-    <rect x="145" y="392" width="734" height="492" rx="126" fill="#1c1f22" opacity=".16" transform="translate(0 16)"/>
-    <rect x="145" y="374" width="734" height="492" rx="126" fill="#d9dee2"/>
-    <path d="M236 478a46 46 0 0 1 46-46h460a46 46 0 0 1 46 46v114H236z" fill="#c3cad0"/>
-    <!-- Receipt emerging from the slot -->
-    <path d="M360 132h330v422l-22 20-22-20-22 20-22-20-22 20-22-20-22 20-22-20-22 20-22-20-22 20-22-20-22 20-22-20-22 20-22-20V132z" fill="#fff"/>
-    <path d="M378 170h268" fill="none" stroke="#c3cad0" stroke-width="10" stroke-linecap="round"/>
-    <!-- Bold, friendly cat stamp: kept geometric for tiny-size clarity -->
-    <path d="M423 277v-48l55 34 34-12 34 12 55-34v48l-18 108q-4 27-29 27h-84q-25 0-29-27z" fill="#1c1f22"/>
-    <path d="M466 313a16 16 0 1 0 0 32 16 16 0 0 0 0-32m92 0a16 16 0 1 0 0 32 16 16 0 0 0 0-32" fill="#fff"/>
-    <path d="M512 356l-14 14h28z" fill="#2f5bd3"/>
-    <path d="M512 370q-13 17-29 5m29-5q13 17 29 5" fill="none" stroke="#fff" stroke-width="8" stroke-linecap="round"/>
-    <path d="M426 445h172" fill="none" stroke="#1c1f22" stroke-width="17" stroke-linecap="round"/>
-    <path d="M454 478h116" fill="none" stroke="#c3cad0" stroke-width="10" stroke-linecap="round"/>
+    <rect x="145" y="462" width="734" height="492" rx="126" fill="#1c1f22" opacity=".16" transform="translate(0 16)"/>
+    <rect x="145" y="444" width="734" height="492" rx="126" fill="#d9dee2"/>
+    <path d="M236 548a46 46 0 0 1 46-46h460a46 46 0 0 1 46 46v114H236z" fill="#c3cad0"/>
+    <!-- Receipt strip: wider, longer thermal paper with a torn top edge -->
+    <path d="M296 97l18-27 18 27 18-27 18 27 18-27 18 27 18-27 18 27 18-27 18 27 18-27 18 27 18-27 18 27 18-27 18 27 18-27 18 27 18-27 18 27 18-27 18 27 18-27 18 27v483H296z" fill="#fff"/>
+    <!-- Text lines: simple, bold printed marks rather than an illustration -->
+    <rect x="401" y="140" width="222" height="36" rx="18" fill="#1c1f22"/>
+    <rect x="365" y="215" width="294" height="25.5" rx="12.75" fill="#1c1f22"/>
+    <rect x="365" y="269" width="237" height="25.5" rx="12.75" fill="#1c1f22"/>
+    <rect x="383" y="323" width="258" height="25.5" rx="12.75" fill="#1c1f22"/>
+    <rect x="365" y="377" width="174" height="25.5" rx="12.75" fill="#1c1f22"/>
     <!-- Printer mouth and controls -->
-    <rect x="236" y="487" width="552" height="105" rx="28" fill="#1c1f22"/>
-    <rect x="280" y="522" width="464" height="14" rx="7" fill="#5d666e"/>
-    <rect x="286" y="690" width="112" height="34" rx="17" fill="#2f5bd3"/>
-    <rect x="429" y="690" width="212" height="34" rx="17" fill="#c3cad0"/>
-    <circle cx="711" cy="707" r="17" fill="#2f5bd3"/>
-    <path d="M711 696v11l8 5" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round"/>
+    <rect x="236" y="557" width="552" height="105" rx="28" fill="#1c1f22"/>
+    <rect x="280" y="592" width="464" height="14" rx="7" fill="#5d666e"/>
+    <rect x="286" y="760" width="112" height="34" rx="17" fill="#2f5bd3"/>
+    <rect x="429" y="760" width="212" height="34" rx="17" fill="#c3cad0"/>
+    <circle cx="711" cy="777" r="17" fill="#2f5bd3"/>
+    <path d="M711 766v11l8 5" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round"/>
     <!-- Gentle feet -->
-    <rect x="238" y="844" width="86" height="20" rx="10" fill="#1c1f22" opacity=".38"/>
-    <rect x="700" y="844" width="86" height="20" rx="10" fill="#1c1f22" opacity=".38"/>
+    <rect x="238" y="914" width="86" height="20" rx="10" fill="#1c1f22" opacity=".38"/>
+    <rect x="700" y="914" width="86" height="20" rx="10" fill="#1c1f22" opacity=".38"/>
   </g>
 </svg>
