@@ -104,7 +104,7 @@ describe("Printer Bluetooth", () => {
     const bits = new Uint8Array(384 * height);
     bits[0] = 1;
     bits[384 * 3 + 8] = 1;
-    await printer.print(bits, height, 4, vi.fn());
+    await printer.print(bits, height, 384, 4, vi.fn());
 
     const expected = [
       CMD.getState(),
@@ -130,7 +130,7 @@ describe("Printer Bluetooth", () => {
     await printer.connect();
     tx.writeValueWithoutResponse = vi.fn(async () => { throw new Error("radio failed"); });
 
-    await printer.print(new Uint8Array(384), 1, 1, vi.fn());
+    await printer.print(new Uint8Array(384), 1, 384, 1, vi.fn());
 
     expect(callbacks.onMessage).toHaveBeenCalledWith("Printing stopped: radio failed", true);
   });
@@ -145,7 +145,7 @@ describe("Printer Bluetooth", () => {
       listenerState.listener?.({ target: rx } as unknown as Event);
     };
 
-    const printing = printer.print(new Uint8Array(384), 1, 1, vi.fn());
+    const printing = printer.print(new Uint8Array(384), 1, 384, 1, vi.fn());
     await Promise.resolve();
     await Promise.resolve();
     expect(writes).toHaveLength(1);

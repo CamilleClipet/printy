@@ -1,4 +1,3 @@
-import { WIDTH } from "../printer/protocol";
 import type { RenderedPrint, RenderSource } from "./types";
 
 export function rgbaToBits(data: Uint8ClampedArray, width: number, height: number, threshold: boolean): Uint8Array {
@@ -30,6 +29,7 @@ export function rgbaToBits(data: Uint8ClampedArray, width: number, height: numbe
 export function convertToBits(src: RenderSource): RenderedPrint {
   const { canvas, threshold } = src;
   const ctx = canvas.getContext("2d")!;
-  const { data } = ctx.getImageData(0, 0, WIDTH, canvas.height);
-  return { bits: rgbaToBits(data, WIDTH, canvas.height, threshold), height: canvas.height };
+  const width = canvas.width;
+  const { data } = ctx.getImageData(0, 0, width, canvas.height);
+  return { bits: rgbaToBits(data, width, canvas.height, threshold), height: canvas.height, width };
 }

@@ -94,7 +94,7 @@ export class Printer {
     if (this.pace > 0) await new Promise((resolve) => setTimeout(resolve, this.pace));
   }
 
-  async print(bits: Uint8Array, height: number, darkness: 1 | 2 | 3 | 4, onProgress: (percent: number) => void): Promise<void> {
+  async print(bits: Uint8Array, height: number, width: number, darkness: 1 | 2 | 3 | 4, onProgress: (percent: number) => void): Promise<void> {
     if (!this.tx) return;
     this.callbacks.onStatus("busy", "Printing…");
     this.pace = 6;
@@ -108,11 +108,11 @@ export class Printer {
       await this.send(CMD.latticeStart());
       this.pace = 6; // steady pacing; faster floods the printer
       for (let y = 0; y < height; y++) {
-        const row = packRow(bits, y);
+        const row = packRow(bits, y, width);
         // Runs of blank rows are sent as paper feeds, which is much faster.
         if (row.every((b) => b === 0)) {
           let n = 1;
-          while (y + n < height && packRow(bits, y + n).every((b) => b === 0)) n++;
+          while (y + n < height && packRow(bits, y + n, width).every((b) => b === 0)) n++;
           await this.send(CMD.feed(n));
           y += n - 1;
         } else {

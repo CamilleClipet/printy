@@ -65,4 +65,13 @@ describe("printer protocol", () => {
     expect(second[1]).toBe(0x01);
     expect(second[47]).toBe(0x00);
   });
+
+  it("packs rows at a 576-dot width", () => {
+    const bits = new Uint8Array(576);
+    bits[575] = 1;
+
+    const row = packRow(bits, 0, 576);
+    expect(row).toHaveLength(72);
+    expect(row[71]).toBe(0x80);
+  });
 });
