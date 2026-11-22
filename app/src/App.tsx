@@ -8,6 +8,7 @@ import type { RenderedPrint } from "./render/types";
 import { loadSavedImage, saveImage } from "./imageStore";
 import { addPadding, SPACING_LABELS, type Spacing } from "./render/padding";
 import { clampPaperMm, DEFAULT_PAPER_MM, MAX_PAPER_MM, MIN_PAPER_MM, PAPER_PRESETS, printWidthDots } from "./printer/paper";
+import { saveOrShareImage } from "./platform";
 
 type Mode = "text" | "image" | "test";
 type FontOption = '"Helvetica Neue", Arial, sans-serif' | 'Georgia, "Times New Roman", serif' | 'Menlo, "Courier New", monospace';
@@ -259,17 +260,7 @@ export default function App() {
     canvas.toBlob((blob) => {
       if (!blob) { setMessage("Couldn't create the image."); setMessageError(true); return; }
       const stamp = new Date().toISOString().slice(0, 19).replace(/[-:]/g, "").replace("T", "-");
-      const file = new File([blob], `printy-${stamp}.png`, { type: "image/png" });
-      // On phones, the share sheet is the reliable way to save to Photos/Files (in-app browsers often ignore downloads).
-      if (matchMedia("(pointer: coarse)").matches && navigator.canShare?.({ files: [file] })) {
-        navigator.share({ files: [file] }).catch(() => { /* user cancelled */ });
-        return;
-      }
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url; link.download = file.name;
-      link.click();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      void saveOrShareImage(blob, `printy-${stamp}.png`);
     }, "image/png");
   };
 
