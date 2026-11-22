@@ -1,4 +1,5 @@
-import { CMD, ENERGY, MOTOR_SPEED, packRow, RX, SERVICE, SERVICE_ADV, TX } from "./protocol";
+import { ChooserCancelled, printerTransport, type PrinterTransport } from "../platform";
+import { CMD, ENERGY, MOTOR_SPEED, packRow } from "./protocol";
 
 export type PrinterStatus = "busy" | "on" | "";
 export type PrinterCallbacks = {
@@ -8,94 +9,69 @@ export type PrinterCallbacks = {
 };
 
 export class Printer {
-  private device: BluetoothDevice | null = null;
-  private tx: BluetoothRemoteGATTCharacteristic | null = null;
+  private hasConnectedDevice = false;
+  private deviceName = "Connected";
   private paused = false;
   private pace = 6;
 
-  constructor(private readonly callbacks: PrinterCallbacks) {}
+  constructor(private readonly callbacks: PrinterCallbacks, private readonly transport: PrinterTransport = printerTransport) {}
 
   get connected(): boolean {
-    return this.tx !== null;
+    return this.hasConnectedDevice;
   }
 
   get hasDevice(): boolean {
-    return this.device !== null;
+    return this.hasConnectedDevice;
   }
 
   disconnect(): void {
-    if (this.device?.gatt?.connected) this.device.gatt.disconnect();
+    this.transport.disconnect();
   }
 
   private onDisconnect = (): void => {
-    this.tx = null;
+    this.hasConnectedDevice = false;
     this.callbacks.onStatus("", "Not connected");
     this.callbacks.onConnectionChange(false);
   };
 
   async connect(): Promise<void> {
-    if (!navigator.bluetooth) {
+    if (!this.transport.supported) {
       this.callbacks.onMessage("This browser can't use Bluetooth. On iPhone, open this page in the Bluefy app.", true);
       return;
     }
-    let step = "choosing the printer";
     try {
       this.callbacks.onStatus("busy", "Connecting…");
-      this.device = await navigator.bluetooth.requestDevice({
-        filters: [{ namePrefix: "X6" }, { services: [SERVICE_ADV] }],
-        optionalServices: [SERVICE, SERVICE_ADV],
-      });
-      this.device.addEventListener("gattserverdisconnected", this.onDisconnect);
-      step = "connecting";
-      const server = await this.device.gatt!.connect();
-      step = "finding the print service";
-      const svc = await server.getPrimaryService(SERVICE);
-      step = "finding the write channel";
-      this.tx = await svc.getCharacteristic(TX);
-      step = "finding the status channel";
-      const rx = await svc.getCharacteristic(RX);
-      step = "turning on status updates";
-      try {
-        await rx.startNotifications();
-        rx.addEventListener("characteristicvaluechanged", this.onNotify);
-      } catch (e) {
-        console.warn("Notifications unavailable", e); // printing still works without them
-      }
-      this.callbacks.onStatus("on", this.device.name || "Connected");
+      this.deviceName = await this.transport.connect({ onDisconnect: this.onDisconnect, onNotify: this.onNotify });
+      this.hasConnectedDevice = true;
+      this.callbacks.onStatus("on", this.deviceName || "Connected");
       this.callbacks.onMessage("");
       this.callbacks.onConnectionChange(true);
-    } catch (e) {
-      this.tx = null;
+    } catch (error) {
+      this.hasConnectedDevice = false;
       this.callbacks.onStatus("", "Not connected");
       this.callbacks.onConnectionChange(false);
-      const error = e as DOMException;
-      if (error && error.name === "NotFoundError" && step === "choosing the printer") {
+      if (error instanceof ChooserCancelled) {
         this.callbacks.onMessage("");
         return;
       }
-      const detail = (error && (error.message || error.name)) || String(e);
-      this.callbacks.onMessage(`Connection failed while ${step}: ${detail}`, true);
+      this.callbacks.onMessage(error instanceof Error ? error.message : String(error), true);
     }
   }
 
-  private onNotify = (event: Event): void => {
-    const value = (event.target as BluetoothRemoteGATTCharacteristic).value;
-    if (!value) return;
-    const v = new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
+  private onNotify = (bytes: Uint8Array): void => {
     // The printer sends 51 78 AE ... with 0x10 to ask us to pause, 0x00 to resume.
-    if (v[0] === 0x51 && v[1] === 0x78 && v[2] === 0xae) this.paused = v[6] === 0x10;
+    if (bytes[0] === 0x51 && bytes[1] === 0x78 && bytes[2] === 0xae) this.paused = bytes[6] === 0x10;
   };
 
-  private async send(bytes: Uint8Array<ArrayBuffer>): Promise<void> {
-    while (this.paused) await new Promise((resolve) => setTimeout(resolve, 20));
-    const tx = this.tx!;
-    if (tx.writeValueWithoutResponse) await tx.writeValueWithoutResponse(bytes);
-    else await tx.writeValue(bytes);
+  private async send(bytes: Uint8Array): Promise<void> {
+    while (this.paused && this.hasConnectedDevice) await new Promise((resolve) => setTimeout(resolve, 20));
+    if (!this.hasConnectedDevice) throw new Error("printer disconnected");
+    await this.transport.write(bytes);
     if (this.pace > 0) await new Promise((resolve) => setTimeout(resolve, this.pace));
   }
 
   async print(bits: Uint8Array, height: number, width: number, darkness: 1 | 2 | 3 | 4, onProgress: (percent: number) => void): Promise<void> {
-    if (!this.tx) return;
+    if (!this.hasConnectedDevice) return;
     this.callbacks.onStatus("busy", "Printing…");
     this.pace = 6;
     try {
@@ -124,9 +100,9 @@ export class Printer {
       await this.send(CMD.latticeEnd());
       await this.send(CMD.getState());
       this.callbacks.onMessage("Printed.");
-    } catch (e) {
-      this.callbacks.onMessage("Printing stopped: " + (e as Error).message, true);
+    } catch (error) {
+      if (this.hasConnectedDevice) this.callbacks.onMessage("Printing stopped: " + (error as Error).message, true);
     }
-    this.callbacks.onStatus(this.tx ? "on" : "", this.tx ? (this.device?.name || "Connected") : "Not connected");
+    this.callbacks.onStatus(this.hasConnectedDevice ? "on" : "", this.hasConnectedDevice ? (this.deviceName || "Connected") : "Not connected");
   }
 }

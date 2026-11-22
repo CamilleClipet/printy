@@ -24,7 +24,7 @@ html, body { margin: 0; }
 body {
   background: var(--casing);
   color: var(--ink);
-  font-family: "Bricolage Grotesque", -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-family: "Bricolage Grotesque Variable", "Bricolage Grotesque", -apple-system, "Segoe UI", Roboto, sans-serif;
   font-size: 17px;
   line-height: 1.45;
   -webkit-tap-highlight-color: transparent;
